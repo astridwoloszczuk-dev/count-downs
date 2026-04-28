@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Family Countdowns</title>
+  <link rel="manifest" href="./manifest.json" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --indigo:    #4f46e5;
+      --indigo-lt: #ede9fe;
+      --green:     #16a34a;
+      --green-lt:  #dcfce7;
+      --amber:     #d97706;
+      --amber-lt:  #fef3c7;
+      --red:       #dc2626;
+      --red-lt:    #fee2e2;
+      --gray-50:   #f9fafb;
+      --gray-100:  #f3f4f6;
+      --gray-200:  #e5e7eb;
+      --gray-400:  #9ca3af;
+      --gray-600:  #4b5563;
+      --gray-900:  #111827;
+      --tab-h:     56px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100dvh;
+      padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom));
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--indigo);
+      color: white;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .app-title { font-size: 1.1rem; font-weight: 700; }
+
+    /* ── Main ── */
+    main { padding: 14px 16px 80px; }
+
+    /* ── Event card ── */
+    .event-card {
+      background: white;
+      border-radius: 14px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      animation: slideIn .12s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Countdown box ── */
+    .cdown-box {
+      min-width: 64px;
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .cdown-box.today  { background: var(--green-lt); }
+    .cdown-box.soon   { background: var(--amber-lt); }
+    .cdown-box.month  { background: var(--indigo-lt); }
+    .cdown-box.future { background: var(--gray-100); }
+
+    .cdown-num {
+      font-size: 1.55rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .cdown-box.today  .cdown-num { color: var(--green); }
+    .cdown-box.soon   .cdown-num { color: var(--amber); }
+    .cdown-box.month  .cdown-num { color: var(--indigo); }
+    .cdown-box.future .cdown-num { color: var(--gray-600); }
+
+    .cdown-label {
+      font-size: .6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-top: 2px;
+    }
+    .cdown-box.today  .cdown-label { color: var(--green); }
+    .cdown-box.soon   .cdown-label { color: var(--amber); }
+    .cdown-box.month  .cdown-label { color: var(--indigo); }
+    .cdown-box.future .cdown-label { color: var(--gray-400); }
+
+    /* ── Event info ── */
+    .ev-info { flex: 1; min-width: 0; }
+
+    .ev-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .ev-emoji { font-size: 1.1rem; flex-shrink: 0; }
+    .ev-name {
+      font-size: .95rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ev-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ev-date { font-size: .75rem; color: var(--gray-400); }
+    .ev-vis  { display: flex; gap: 3px; }
+
+    .vis-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: .55rem;
+      font-weight: 700;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Delete button ── */
+    .del-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--gray-400);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity .15s, background .15s, color .15s;
+    }
+    .event-card:hover .del-btn { opacity: 1; }
+    .del-btn:hover { background: var(--red-lt); color: var(--red); }
+
+    @media (hover: none) {
+      .del-btn { opacity: 0.25; }
+    }
+
+    /* ── Empty state ── */
+    #empty-state {
+      text-align: center;
+      padding: 72px 24px;
+      color: var(--gray-400);
+    }
+    #empty-state .empty-icon { font-size: 3rem; margin-bottom: 12px; }
+    #empty-state p { font-size: .9rem; }
+    #empty-state.hidden { display: none; }
+
+    /* ── Tab bar ── */
+    .tab-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: calc(var(--tab-h) + env(safe-area-inset-bottom));
+      padding-bottom: env(safe-area-inset-bottom);
+      background: white;
+      border-top: 1px solid var(--gray-200);
+      display: flex;
+      z-index: 20;
+    }
+    .tab-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-size: .68rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 0;
+      color: var(--gray-400);
+      transition: color .15s;
+    }
+    .tab-initial {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .78rem;
+      font-weight: 700;
+      color: white;
+      opacity: 0.3;
+      transition: opacity .15s, transform .15s;
+    }
+    .tab-btn.active .tab-initial { opacity: 1; transform: scale(1.1); }
+    .tab-btn.active { color: var(--gray-900); }
+
+    /* ── FAB ── */
+    #fab {
+      position: fixed;
+      bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 16px);
+      right: 16px;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--indigo);
+      color: white;
+      border: none;
+      font-size: 1.7rem;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(79,70,229,.45);
+      z-index: 15;
+      transition: background .15s, transform .1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #fab:hover    { background: #4338ca; transform: scale(1.06); }
+    #fab:active   { transform: scale(0.95); }
+
+    /* ── Modal backdrop (sheet on mobile, centered on desktop) ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-backdrop.hidden { display: none; }
+
+    .modal {
+      background: white;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 20px calc(28px + env(safe-area-inset-bottom));
+      width: 100%;
+      max-height: 88vh;
+      overflow-y: auto;
+      box-shadow: 0 -8px 40px rgba(0,0,0,.2);
+    }
+
+    @media (min-width: 520px) {
+      .modal-backdrop { align-items: center; padding: 24px; }
+      .modal { border-radius: 20px; max-width: 440px; padding: 28px 28px 24px; }
+    }
+
+    .modal h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; }
+
+    /* ── Form fields ── */
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--gray-400);
+      margin-bottom: 7px;
+    }
+    .field input[type="text"],
+    .field input[type="date"] {
+      width: 100%;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 1rem;
+      font-family: inherit;
+      outline: none;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: var(--indigo); background: white; }
+
+    /* ── Emoji grid ── */
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 4px;
+    }
+    .emoji-btn {
+      border: 2px solid transparent;
+      border-radius: 8px;
+      background: var(--gray-50);
+      font-size: 1.25rem;
+      padding: 4px 2px;
+      cursor: pointer;
+      transition: border-color .1s, background .1s;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .emoji-btn:hover   { background: var(--indigo-lt); }
+    .emoji-btn.selected { border-color: var(--indigo); background: var(--indigo-lt); }
+
+    /* ── Visibility pills ── */
+    .vis-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .vis-all-btn {
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1.5px solid var(--gray-200);
+      background: white;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--gray-600);
+      transition: all .15s;
+    }
+    .vis-all-btn.selected {
+      background: var(--indigo);
+      border-color: var(--indigo);
+      color: white;
+    }
+
+    .vis-pill {
+      height: 34px;
+      padding: 0 12px 0 6px;
+      border-radius: 999px;
+      border: 1.5px solid var(--gray-200);
+      background: white;
+      font-size: .82rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--gray-600);
+      transition: all .15s;
+    }
+    .vis-pill.selected {
+      background: var(--member-color);
+      border-color: var(--member-color);
+      color: white;
+    }
+    .vis-initial {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      font-size: .6rem;
+      font-weight: 700;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ── Modal actions ── */
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .cancel-btn {
+      flex: 1;
+      padding: 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px;
+      background: white;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--gray-600);
+      font-family: inherit;
+    }
+    .save-btn {
+      flex: 2;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: var(--indigo);
+      color: white;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s;
+    }
+    .save-btn:hover { background: #4338ca; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="app-title">⏳ Family Countdown</div>
+  </header>
+
+  <main>
+    <div id="event-list"></div>
+    <div id="empty-state" class="hidden">
+      <div class="empty-icon">🗓️</div>
+      <p>No upcoming events — tap + to add one</p>
+    </div>
+  </main>
+
+  <!-- Tab bar (built by JS) -->
+  <nav class="tab-bar" id="tab-bar"></nav>
+
+  <!-- FAB -->
+  <button id="fab" aria-label="Add event">+</button>
+
+  <!-- Add event modal -->
+  <div id="add-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Add Event</h2>
+
+      <div class="field">
+        <label for="event-title">Event name</label>
+        <input id="event-title" type="text" placeholder="e.g. Golf tournament…" autocomplete="off" autocorrect="off" />
+      </div>
+
+      <div class="field">
+        <label for="event-date">Date</label>
+        <input id="event-date" type="date" />
+      </div>
+
+      <div class="field">
+        <label>Emoji</label>
+        <div id="emoji-grid" class="emoji-grid"></div>
+      </div>
+
+      <div class="field">
+        <label>Visible to</label>
+        <div id="vis-pills" class="vis-pills"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="cancel-btn" class="cancel-btn" type="button">Cancel</button>
+        <button id="save-btn"   class="save-btn"   type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
