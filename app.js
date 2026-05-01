@@ -6,7 +6,7 @@ const MEMBERS  = ['Astrid', 'Niko', 'Max', 'Alex', 'Vicky'];
 const COLORS   = { Astrid: '#d97706', Niko: '#dc2626', Max: '#16a34a', Alex: '#2563eb', Vicky: '#db2777' };
 const INITIALS = { Astrid: 'As', Niko: 'N', Max: 'M', Alex: 'Al', Vicky: 'V' };
 
-const EMOJIS = ['📅','✈️','🏌️','⛳','📚','🎓','🏃','🎂','🎉','🏖️','🎮','🏆','⚽','🎵','🎭','🧳','🎄','🌍','🩺','🎪'];
+const EMOJIS = ['📅','✈️','🏌️','⛳','📚','🎓','🏃','🎂','🎉','🏖️','🎮','🏆','⚽','🎵','🎭','🧳','🎄','🌍','🩺','🏠'];
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
@@ -17,6 +17,8 @@ let currentTab      = localStorage.getItem('countdown_tab') || MEMBERS[0];
 let events          = [];
 let selectedEmoji   = '📅';
 let selectedVisible = new Set(MEMBERS);
+let editingId       = null;
+let expandedId      = null;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const tabBar     = document.getElementById('tab-bar');
@@ -159,7 +161,7 @@ function render() {
     ).join('');
 
     const card = document.createElement('div');
-    card.className = 'event-card';
+    card.className = `event-card${expandedId === ev.id ? ' expanded' : ''}`;
     card.innerHTML = `
       <div class="cdown-box ${urg}">
         <span class="cdown-num">${dayNum}</span>
@@ -175,15 +177,28 @@ function render() {
           <span class="ev-vis">${visDots}</span>
         </div>
       </div>
-      <button class="del-btn" type="button" aria-label="Delete event">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6"/><path d="M14 11v6"/>
-        </svg>
-      </button>
+      <div class="card-btns">
+        <button class="edit-btn" type="button" aria-label="Edit event">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button class="del-btn" type="button" aria-label="Delete event">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+        </button>
+      </div>
     `;
-    card.querySelector('.del-btn').addEventListener('click', () => deleteEvent(ev.id));
+    card.querySelector('.ev-info').addEventListener('click', () => {
+      expandedId = expandedId === ev.id ? null : ev.id;
+      render();
+    });
+    card.querySelector('.edit-btn').addEventListener('click', e => { e.stopPropagation(); openModal(ev); });
+    card.querySelector('.del-btn').addEventListener('click',  e => { e.stopPropagation(); deleteEvent(ev.id); });
     eventList.appendChild(card);
   });
 }
@@ -216,16 +231,25 @@ async function saveEvent() {
   const date  = dateInput.value;
   if (!title || !date || selectedVisible.size === 0) return;
 
-  const { data } = await db.from('countdowns').insert({
-    title,
-    event_date: date,
-    emoji: selectedEmoji,
-    visible_to: Array.from(selectedVisible),
-  }).select().single();
+  const payload = { title, event_date: date, emoji: selectedEmoji, visible_to: Array.from(selectedVisible) };
 
-  if (data && data.event_date >= todayStr()) {
-    events.push(data);
-    events.sort((a, b) => a.event_date.localeCompare(b.event_date));
+  if (editingId) {
+    const { data } = await db.from('countdowns').update(payload).eq('id', editingId).select().single();
+    if (data) {
+      const idx = events.findIndex(e => e.id === editingId);
+      if (data.event_date >= todayStr()) {
+        if (idx >= 0) events[idx] = data; else events.push(data);
+      } else {
+        if (idx >= 0) events.splice(idx, 1);
+      }
+      events.sort((a, b) => a.event_date.localeCompare(b.event_date));
+    }
+  } else {
+    const { data } = await db.from('countdowns').insert(payload).select().single();
+    if (data && data.event_date >= todayStr()) {
+      events.push(data);
+      events.sort((a, b) => a.event_date.localeCompare(b.event_date));
+    }
   }
   closeModal();
   render();
@@ -233,18 +257,21 @@ async function saveEvent() {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-function openModal() {
-  selectedEmoji   = '📅';
-  selectedVisible = new Set(MEMBERS);
-  titleInput.value = '';
-  dateInput.value  = '';
-  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.toggle('selected', b.textContent === '📅'));
+function openModal(ev = null) {
+  editingId = ev ? ev.id : null;
+  document.querySelector('#add-modal h2').textContent = ev ? 'Edit Event' : 'Add Event';
+  selectedEmoji   = ev ? (ev.emoji || '📅') : '📅';
+  selectedVisible = ev ? new Set(ev.visible_to) : new Set(MEMBERS);
+  titleInput.value = ev ? ev.title : '';
+  dateInput.value  = ev ? ev.event_date : '';
+  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.toggle('selected', b.textContent === selectedEmoji));
   updateVisPills();
   modal.classList.remove('hidden');
   setTimeout(() => titleInput.focus(), 80);
 }
 
 function closeModal() {
+  editingId = null;
   modal.classList.add('hidden');
 }
 
